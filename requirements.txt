@@ -1,0 +1,10 @@
+pyQt5
+QScintilla
+PyQtWebEngine
+behave
+allure-behave
+jinja2
+xlrd
+xlwt
+watchdog
+pywin32
