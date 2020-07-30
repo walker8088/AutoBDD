@@ -2,8 +2,9 @@ pyQt5
 QScintilla
 PyQtWebEngine
 behave
+behave-webdriver
 allure-behave
-jinja2
+mako
 xlrd
 xlwt
 watchdog

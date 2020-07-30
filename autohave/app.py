@@ -17,6 +17,7 @@ from PyQt5.Qsci import *
 
 import xlrd
 import xlwt
+import pyexcel
 
 from .utils import *
 from .manager import *
@@ -24,11 +25,12 @@ from .editor import *
 from .views import *
 from .report import *
 
+#---------------------------------------------------------------#
 APP_NAME = 'AutoHave'
 APP_SHOW = 'AutoHave BDD自动化测试'
 UID_FILE = 'uid'
 
-#---------------------------------#
+#---------------------------------------------------------------#
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -297,7 +299,7 @@ class MainWindow(QMainWindow):
         if not isSameID(Path(allure_log_path, UID_FILE), Path(allure_report_path, UID_FILE)):
             uid = Path(allure_log_path, UID_FILE).read_text()
             try:
-                self.runCmd(f'allure.bat  generate -c "{allure_log_path}" -o "{allure_report_path}"') 
+                self.runCmd(f'allure.cmd  generate -c "{allure_log_path}" -o "{allure_report_path}"') 
             except Exception as e:
                 self.execView.append(str(e)+'\n')
                 self.process = None
@@ -332,6 +334,7 @@ class MainWindow(QMainWindow):
     def runCmd(self, cmd):    
         
         self.execView.show()
+        self.execView.clear()
         self.execView.append(f'RUN: {cmd}\n')
         self.process = Popen(cmd, stdout=PIPE, stderr=PIPE)
         self.processThread = ProcessOutThread(self.process)
@@ -503,12 +506,13 @@ class MainWindow(QMainWindow):
     def newFeatureFromData(self, sheet, manager):
         
         count = 0
-        
-        scenario_name_index  = 2
-        given_index = 9
-        steps_index = 3
-        then_index = 4
-        
+                                 #feature 对应 模块    
+        scenario_name_index  = 1 #场景名称 对应 用例标题
+        given_index = 8          #前置条件
+        steps_index = 2          #操作步骤
+        then_index = 4           #期望结果   
+        data_index = 3
+
         def is_empty_line(line):
             for it in line:
                 if it.strip() != '':
@@ -521,15 +525,16 @@ class MainWindow(QMainWindow):
         def build_scenario_from_line(line):
             scenario_name = line[scenario_name_index]
             givens = clean_steps(line[given_index].strip().split('\n'))
-            given_steps = clean_steps([' '.join(givens).strip(),])
-            steps = clean_steps(line[steps_index].strip().split('\n'))
-            print(steps)
-            when_steps = clean_steps([steps.pop()])
-            given_steps.extend(steps)
+            given_steps = [f'前置_{it}' for it in givens]
+            step_data = line[data_index]
+            #given_steps = clean_steps([' '.join(givens).strip(),])
+            when_steps = clean_steps(line[steps_index].strip().split('\n'))
+            #when_steps = clean_steps([steps.pop()])
+            #given_steps.extend(steps)
         
             then_steps = line[then_index].strip().split('\n')
             
-            return Scenario(scenario_name, given_steps, when_steps, then_steps)
+            return Scenario(scenario_name, given_steps, when_steps, then_steps, step_data)
         
         def newFeatureFor(name, scenarios, all_sets):
              nonlocal count
@@ -553,7 +558,7 @@ class MainWindow(QMainWindow):
             qApp.processEvents()
             
             line = sheet.row_values(line_index)
-            name = f'{line[0]}_{line[1]}'
+            name = line[0] #f'{line[0]}_{line[1]}'
             
             if is_empty_line(line):
                 line_index += 1
@@ -582,7 +587,7 @@ class MainWindow(QMainWindow):
                 line_index += 1    
             #老Feature的新场景
             elif name == feature_name: 
-                #print(f"    Feature {feature_name} append scenario {scenario.name}")
+                print(f"    Feature {feature_name} append scenario {scenario.name}")
                 line_index += 1
             #遇到新feature,先把老Feature的数据提交处理
             else:
@@ -690,19 +695,19 @@ class MainWindow(QMainWindow):
     def createActions(self):
             
         self.newTestAction = QAction(
-            "New", 
+            "新建测试集目录", 
             self, 
             statusTip="新建测试集", 
             triggered=self.onNewTestCase)
         
         self.openTestAction = QAction(
-            "Open", 
+            "打开测试集目录", 
             self, 
             statusTip="打开测试集", 
             triggered=self.onOpenTestCase)
         
         self.closeTestAction = QAction(
-            "Close", 
+            "关闭测试集", 
             self, 
             statusTip="关闭测试集", 
             triggered=self.onCloseTestCase)
@@ -710,25 +715,25 @@ class MainWindow(QMainWindow):
         self.closeTestAction.setEnabled(False)
 
         self.saveTestAction = QAction(
-            "SaveAll",
+            "保存测试集",
             self,
             statusTip="保存测试集",
             triggered=self.onSaveAllFiles)
         
         self.runTestAction = QAction(
-            "Run",
+            "运行测试集",
             self,
             statusTip="运行测试集",
             triggered=self.onRunTestCase)
         
         self.viewReportAction = QAction(
-            "Report",
+            "查看报告",
             self,
             statusTip="查看报告",
             triggered=self.onViewReport)
         
         self.checkTestAction = QAction(
-            "Check",
+            "检查",
             self,
             statusTip="检查测试集",
             triggered=self.onCheckTestCase)
@@ -754,13 +759,13 @@ class MainWindow(QMainWindow):
             triggered=self.onSaveFile)
         
         self.importExcelAction = QAction(
-            "导入",
+            "导入Excel测试用例",
             self,
             statusTip="导入Excel文件到当前目录",
             triggered=self.onImportExcel)
         
         self.exportExcelAction = QAction(
-            "导出",
+            "导出Excel测试用例",
             self,
             statusTip="导出到Excel文件",
             triggered=self.onExportExcel)
@@ -914,7 +919,7 @@ class MainWindow(QMainWindow):
     def about(self):
         pass
                 
-#-----------------------------------------------------#
+#---------------------------------------------------------------#
 class AutoHaveApp(QApplication):
     def __init__(self, argv):
         super().__init__([])
@@ -922,7 +927,7 @@ class AutoHaveApp(QApplication):
         self.mainWin = MainWindow()
         self.mainWin.show()
         
-#-----------------------------------------------------#
+#---------------------------------------------------------------#
 def run():
     app = AutoHaveApp(sys.argv)
     sys.exit(app.exec_())

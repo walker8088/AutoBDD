@@ -10,7 +10,7 @@ from PyQt5.Qsci import *
 
 from .utils import *
 
-#---------------------------------#
+#---------------------------------------------------------------#
 class FeatureLexer(QsciLexerCustom):
 
     def __init__(self, parent):
@@ -187,7 +187,7 @@ class FeatureLexer(QsciLexerCustom):
             ###
         
     ''''''        
-#---------------------------------#
+#---------------------------------------------------------------#
 class CustomEditor(QsciScintilla):
     ARROW_MARKER_NUM = 8
 
@@ -257,7 +257,7 @@ class CustomEditor(QsciScintilla):
         self.isFocus = False
         #print('focusOutEvent', event)
         
-#---------------------------------#
+#---------------------------------------------------------------#
 class FeatureEditor(CustomEditor):
     
     def __init__(self, parent = None, panel = None):
@@ -317,7 +317,7 @@ class FeatureEditor(CustomEditor):
     def onRenameFeature(self):
         pass
         
-#---------------------------------#
+#---------------------------------------------------------------#
 class PythonEditor(CustomEditor):
     
     def __init__(self, parent = None, panel = None):

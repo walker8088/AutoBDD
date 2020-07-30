@@ -5,7 +5,7 @@ from contextlib import closing
 import behave
 from behave import parser
 
-#---------------------------------#
+#---------------------------------------------------------------#
 def find_free_port():
     with closing(socket.socket(socket.AF_INET, socket.SOCK_STREAM)) as s:
         s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -13,7 +13,7 @@ def find_free_port():
         s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         return s.getsockname()[1]
         
-#---------------------------------#
+#---------------------------------------------------------------#
 def isSameID(file1, file2):
     
     if not file1.is_file():
@@ -28,7 +28,7 @@ def isSameID(file1, file2):
     return uid1 == uid2
     
 
-#---------------------------------#
+#---------------------------------------------------------------#
 def build_feature_index(feature_text):
     line_index = {}
     p = parser.Parser()

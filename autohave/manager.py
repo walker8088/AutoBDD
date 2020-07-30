@@ -7,7 +7,8 @@ from pathlib import Path
 import collections
 from dataclasses import dataclass
 
-from jinja2 import Template
+#from jinja2 import Template
+from mako.template import Template
 
 from PyQt5 import *
 from PyQt5.QtWidgets import *
@@ -18,21 +19,28 @@ from PyQt5.Qsci import *
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 
+#---------------------------------------------------------------#
 STEPS_PATH = 'steps'
 PY_ENV_FILE = 'environment.py'
 DEFAULT_ENV_FILE = 'default_environment.py'
 FEATURE_TEMPLATE_FILE = 'template.feature'
-FEATURE_JINJA2_TEMPLATE_FILE = 'template.feature.jinja2'
-PY_TEMPLATE_FILE = 'template_steps.py'
-PY_JINJA2_TEMPLATE_FILE = 'template_steps.py.jinja2'
+#FEATURE_JINJA2_TEMPLATE_FILE = 'template.feature.jinja2'
+FEATURE_MAKO_TEMPLATE_FILE = 'template.feature.mako'
 
+PY_TEMPLATE_FILE = 'template_steps.py'
+#PY_JINJA2_TEMPLATE_FILE = 'template_steps.py.jinja2'
+PY_MAKO_TEMPLATE_FILE = 'template_steps.py.mako'
+
+#---------------------------------------------------------------#
 @dataclass
 class Scenario:
     name: str
     given_steps: list
     when_steps:  list
     then_steps:  list
+    step_data: str
 
+#---------------------------------------------------------------#
 class FeatureItem:
     def __init__(self, path, name, is_enabled = True):
         self.path = path
@@ -72,7 +80,7 @@ class FeatureItem:
         else:
             return Path(f'{self.name}.feature') 
             
-#---------------------------------#
+#---------------------------------------------------------------#
 class MyEventHandler(FileSystemEventHandler):
     def __init__(self, parent):
         self.parent = parent
@@ -80,8 +88,7 @@ class MyEventHandler(FileSystemEventHandler):
     def on_modified(self, event):
         self.parent.onFileModified(event)
         
-#---------------------------------#
-
+#---------------------------------------------------------------#
 class TestCaseManager(QObject):
     
     testcase_opened = pyqtSignal([Path])
@@ -274,12 +281,12 @@ class TestCaseManager(QObject):
     
     def newFeatureWith(self, name, scenarios, all_sets):
         
-        if name in self.features:
+        if name in self.features: 
             return False
         
         feature = self.__appendFeature(name)
         
-        feature_template_file = Path(self.path_templates, FEATURE_JINJA2_TEMPLATE_FILE)
+        feature_template_file = Path(self.path_templates, FEATURE_MAKO_TEMPLATE_FILE)
         
         template = Template(feature_template_file.read_text(encoding = 'utf-8') )
         text = template.render(name = name, scenarios = scenarios)
@@ -291,7 +298,7 @@ class TestCaseManager(QObject):
         
         clean_scenarios = self.__merge(scenarios, all_sets)
         
-        py_template_file = Path(self.path_templates, PY_JINJA2_TEMPLATE_FILE)
+        py_template_file = Path(self.path_templates, PY_MAKO_TEMPLATE_FILE)
         template = Template(py_template_file.read_text(encoding = 'utf-8') )
         text = template.render(scenarios = clean_scenarios)
         
@@ -407,10 +414,6 @@ class TestCaseManager(QObject):
             clean_when_steps = clean_add(scen.when_steps, all_when_set)
             clean_then_steps = clean_add(scen.then_steps, all_then_set)
             
-            clean_scenarios.append(Scenario(scen.name, clean_given_steps, clean_when_steps, clean_then_steps))
-        
-        #print("given", all_given_set)
-        #print("when", all_when_set)
-        #print('then', all_then_set)
+            clean_scenarios.append(Scenario(scen.name, clean_given_steps, clean_when_steps, clean_then_steps, scen.step_data))
         
         return clean_scenarios   

@@ -16,7 +16,7 @@ from .utils import *
 from .manager import *
 from .editor import *
 
-#---------------------------------#
+#---------------------------------------------------------------#
 class ProcessOutThread(QThread):
     output = pyqtSignal([str])
     stoped = pyqtSignal([int])
@@ -41,19 +41,9 @@ class ProcessOutThread(QThread):
             if ret != None:
                 break
                 
-            '''
-            text = self.process.stderr.readline().decode('GBK')
-            if text:
-                self.output.emit(f'ERROR: {text}')
-            text = self.process.stdout.readline().decode('GBK')
-            if text:
-                self.output.emit(f'OUT: {text}')
-            else:
-                break
-            '''    
         self.stoped.emit(ret)
         
-#---------------------------------#
+#---------------------------------------------------------------#
 class CmdExecView(QDockWidget):
     def __init__(self, parent):
         super().__init__('进程输出')
@@ -78,19 +68,21 @@ class CmdExecView(QDockWidget):
     def clear(self):
         self.textInfo.clear()
     
+    def copy(self):
+        self.textInfo.copy()
+    
     def onContextMenu(self, pos):
         
         menu = QMenu()
         
         self.clearAction = menu.addAction("Clear")
         self.clearAction.triggered.connect(self.clear)
+        self.copyAction = menu.addAction("Copy")
+        self.copyAction.triggered.connect(self.copy)
         
         menu.exec_(self.textInfo.viewport().mapToGlobal(pos))
-        
-#---------------------------------#
 
-
-#---------------------------------#
+#---------------------------------------------------------------#
 class FeatureView(QDockWidget):
     def __init__(self, parent):
         super().__init__('')
@@ -334,7 +326,7 @@ class FeatureView(QDockWidget):
     def onFileDeleted(self, path, py_file):
         self.loadView()
         
-#---------------------------------#
+#---------------------------------------------------------------#
 
 class FeaturePanel(QWidget):
     
@@ -525,4 +517,6 @@ class FeaturePanel(QWidget):
             self.featureEditor.redo()
         if self.pythonEditor.isFocus:
             self.pythonEditor.redo()
+
+#---------------------------------------------------------------#
 
