@@ -52,3 +52,16 @@ def after_step(ctx, step):
 def after_all(ctx):
     # cleanup after tests run
     ctx.driver.quit()
+
+'''
+before_all()
+   before_feature()
+      before_tag()
+         before_scenario()
+            before_step()
+            after_step()
+         after_scenario()
+      after_tag()
+   after_feature()
+after_all()    
+'''

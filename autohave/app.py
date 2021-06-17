@@ -26,8 +26,8 @@ from .views import *
 from .report import *
 
 #---------------------------------------------------------------#
-APP_NAME = 'AutoHave'
-APP_SHOW = 'AutoHave BDD自动化测试'
+APP_NAME = 'AutoBehaveTest'
+APP_SHOW = 'AutoBehaveTest BDD自动化测试'
 UID_FILE = 'uid'
 
 #---------------------------------------------------------------#
@@ -41,7 +41,8 @@ class MainWindow(QMainWindow):
         self.testManager = TestCaseManager(self.templates_folder)
         
         self.setWindowTitle(APP_SHOW)
-        
+        self.setWindowIcon(QIcon('images\\app.ico'))
+
         self.tabView = QTabWidget(self)
         self.tabView.setTabsClosable(True)
         self.tabView.tabCloseRequested.connect(self.onTabCloseRequest)
@@ -49,9 +50,9 @@ class MainWindow(QMainWindow):
         #self.tabView.customContextMenuRequested.connect(self.openMenu)
         self.setCentralWidget(self.tabView)
         
-        self.execView = CmdExecView(self)
-        self.execView.hide()
-        self.addDockWidget(Qt.BottomDockWidgetArea, self.execView)
+        self.logView = LogView(self)
+        self.logView.hide()
+        self.addDockWidget(Qt.BottomDockWidgetArea, self.logView)
         
         self.reportView = ReportView(self)
         self.reportView.hide()
@@ -66,28 +67,10 @@ class MainWindow(QMainWindow):
         self.featureView = FeatureView(self)
         self.addDockWidget(Qt.LeftDockWidgetArea, self.featureView)
         
-        '''
-        # 2. Create frame and layout
-        self.__frm = QFrame(self)
-        self.__frm.setStyleSheet("QWidget { background-color: #ffeaeaea }")
-        self.__lyt = QVBoxLayout()
-        self.__frm.setLayout(self.__lyt)
-        self.setCentralWidget(self.__frm)
-        self.__myFont = QFont()
-        self.__myFont.setPointSize(14)
-        '''
-        # 3. Place a button
-        #self.__btn = QPushButton("Qsci")
-        #self.__btn.setFixedWidth(50)
-        #self.__btn.setFixedHeight(50)
-        #self.__btn.setFont(self.__myFont)
-        #self.__lyt.addWidget(self.__btn)
-
-        # QScintilla editor setup
-        # ------------------------
-
-        # ! Add editor to layout !
-        #self.__lyt.addWidget(self.editor)
+        self.config = {
+            'allure_log_path' : Path('allure', 'test_log'),
+            'allure_report_path' : Path('allure', 'report'),
+        }
         
         self.featureView.setManager(self.testManager)
         
@@ -107,7 +90,7 @@ class MainWindow(QMainWindow):
         self.onCloseTestCase()
         
         self.initActionStatus()
-        
+
         self.readSettings()
     
     def initActionStatus(self):    
@@ -126,12 +109,23 @@ class MainWindow(QMainWindow):
         self.tbEdit.setEnabled(False)
         self.tbRun.setEnabled(False)
         
+        self.showLogView(False)
+        self.showFeatureView(True)
+        
     def getPanels(self):
         panels = [] 
         for i in range(self.tabView.count()):
             panels.append(self.tabView.tabText(i))
         return panels
-        
+    
+    def showLogView(self, show):
+        self.logView.setVisible(show)
+        self.showLogViewAction.setChecked(show)
+
+    def showFeatureView(self, show):
+        self.featureView.setVisible(show)
+        self.showFeatureViewAction.setChecked(show)
+            
     def editFeature(self, feature):
         
         file_name = str(feature.feature_file)
@@ -240,24 +234,21 @@ class MainWindow(QMainWindow):
          
     def onRunTestCase(self):
         
-        allure_log_path = Path('allure', 'test_log')
-        allure_report_path = Path('allure', 'report')
-        
-        cmd = f'behave -f allure_behave.formatter:AllureFormatter -o "{allure_log_path}"'
-        dlg = QInputDialog(self)
-        dlg.setInputMode(QInputDialog.TextInput)
-        dlg.setWindowTitle('运行提示')
-        dlg.setLabelText('输入运行参数:')
-        dlg.setTextValue(cmd)
-        dlg.resize(700, 150)
-        
+        dlg = CmdExecDialog(self.config)
         ok = dlg.exec_()
         if not ok:
             return
         
-        cmd = dlg.textValue()
+
+        cmd = dlg.cmd.text()
         
+        self.config['allure_cmd'] = dlg.report.text()
+
+        self.writeSettings()
         self.onSaveAllFiles()
+        
+        allure_report_path = self.config['allure_report_path']
+        allure_log_path = self.config['allure_log_path']
         
         if allure_report_path.is_dir():
             shutil.rmtree(allure_report_path, ignore_errors=True)
@@ -265,26 +256,53 @@ class MainWindow(QMainWindow):
         if allure_log_path.is_dir():
             shutil.rmtree(allure_log_path, ignore_errors=True)
         
+        self.logView.clear()
+        
         try:
             self.runCmd(cmd) 
         except Exception as e:
-            self.execView.append(str(e)+'\n')
-            self.process = None    
-        else:    
-            while None != self.process :
-                qApp.processEvents()
+            self.logView.append(str(e)+'\n')
+            self.process = None
+            return
+
+        while None != self.process :
+            qApp.processEvents()
+    
+        #TODO empty folder test
         
-            #TODO empty folder test
         
-            if allure_log_path.is_dir():
-                Path(allure_log_path, UID_FILE).write_text(str(uuid.uuid1()))
-                print(f'Writed uid file [{Path(allure_log_path, UID_FILE)}]')
+        if not dlg.report_check.isChecked():
+            return
+
+        #if not allure_report_path.is_dir():
+        #    allure_report_path.mkdir()
         
+        uid = str(uuid.uuid1())
+
+        Path(allure_log_path, UID_FILE).write_text(uid)
+        print(f'Writed uid file [{Path(allure_log_path, UID_FILE)}]')
+            
+        allure_cmd = self.config['allure_cmd']
+        
+        try:
+            self.runCmd(f'{allure_cmd}  generate -c "{allure_log_path}" -o "{allure_report_path}"') 
+        except Exception as e:
+            self.logView.append(str(e)+'\n')
+            self.process = None
+            return
+        
+        while None != self.process :
+            qApp.processEvents()
+            
+        Path(allure_report_path, UID_FILE).write_text(uid)
+        
+        self.onViewReport()
+
     def onViewReport(self):
         
-        allure_log_path = Path('allure', 'test_log')
-        allure_report_path = Path('allure', 'report')
-       
+        allure_report_path = self.config['allure_report_path']
+        allure_log_path = self.config['allure_log_path']
+        
         if not allure_log_path.is_dir():
             QMessageBox.information(self, '提示', '请先运行测试集.')
             return
@@ -292,24 +310,27 @@ class MainWindow(QMainWindow):
         if not Path(allure_log_path, UID_FILE).is_file():
             QMessageBox.information(self, '提示', '运行结果不完整, 请重新运行测试集.')
             return
-        
+        '''
         if not allure_report_path.is_dir():
             allure_report_path.mkdir()
               
         if not isSameID(Path(allure_log_path, UID_FILE), Path(allure_report_path, UID_FILE)):
             uid = Path(allure_log_path, UID_FILE).read_text()
+            
+            allure_cmd = self.config['allure_cmd']
+            
             try:
-                self.runCmd(f'allure.cmd  generate -c "{allure_log_path}" -o "{allure_report_path}"') 
+                self.runCmd(f'{allure_cmd}  generate -c "{allure_log_path}" -o "{allure_report_path}"') 
             except Exception as e:
-                self.execView.append(str(e)+'\n')
+                self.logView.append(str(e)+'\n')
                 self.process = None
                 return
             
             while None != self.process :
                 qApp.processEvents()
-                
+                 
             Path(allure_report_path, UID_FILE).write_text(uid)
-             
+        '''     
         self.reportView.openReport(allure_report_path)
         
     def onCheckTestCase(self):
@@ -317,25 +338,27 @@ class MainWindow(QMainWindow):
         try:
             self.runCmd(f'behave -d') 
         except Exception as e:
-            self.execView.append(str(e)+'\n')
+            self.logView.append(str(e)+'\n')
             self.process = None    
         else:    
             while None != self.process :
                 qApp.processEvents()
-        
+    
+    def onCodeDebug(self):
+        pass
+
     def onProcessOut(self, text):
-        self.execView.append(text)
+        self.logView.append(text)
     
     def onProcessStoped(self, ret_code):
         self.process = None
         self.processThread = None
-        self.execView.append(f'RUN: Process Stoped with exit code {ret_code}\n')
+        self.logView.append(f'RUN: Process Stoped with exit code {ret_code}\n')
         
     def runCmd(self, cmd):    
         
-        self.execView.show()
-        self.execView.clear()
-        self.execView.append(f'RUN: {cmd}\n')
+        self.showLogView(True)
+        self.logView.append(f'RUN: {cmd}\n')
         self.process = Popen(cmd, stdout=PIPE, stderr=PIPE)
         self.processThread = ProcessOutThread(self.process)
         self.processThread.output.connect(self.onProcessOut)
@@ -354,7 +377,7 @@ class MainWindow(QMainWindow):
             
         #Find in Features    
         for name,feature in self.testManager.features.items():
-            print(f'Matching: {name}')
+            #print(f'Matching: {name}')
             text = feature.py_file.read_text(encoding = 'utf-8')             
             line_pos = match_str(code_str, text)
             if line_pos:
@@ -368,7 +391,7 @@ class MainWindow(QMainWindow):
                 
         #Find in Free Python Files        
         for py_file in self.testManager.free_py_files:
-            print(f'Matching: {py_file}')
+            #print(f'Matching: {py_file}')
             text = py_file.read_text(encoding = 'utf-8')             
             line_pos = match_str(code_str, text)
             if line_pos:
@@ -400,9 +423,7 @@ class MainWindow(QMainWindow):
     
     def onImportExcel(self):
         file_name, _ = QFileDialog.getOpenFileName(self,
-                            "导入Excel文件",
-                            "",
-                            "Excel Files (*.xlsx;*.xls);;")
+                            "导入Excel文件", "", "Excel Files (*.xlsx;*.xls);;")
         
         if file_name == '':
             return
@@ -411,9 +432,7 @@ class MainWindow(QMainWindow):
     
     def onExportExcel(self):
         file_name, _ = QFileDialog.getSaveFileName(self,
-                            "导出Excel文件",
-                            "",
-                            "Excel Files (*.xlsx;*.xls);;")
+                            "导出Excel文件", "", "Excel Files (*.xlsx;*.xls);;")
         
         if file_name == '':
             return
@@ -425,9 +444,8 @@ class MainWindow(QMainWindow):
             QMessageBox.information(self, '提示', f'成功导出到 [{file_name}]')
             
     def importExcel(self, file_name):
-        book = xlrd.open_workbook(file_name)
-        sheet = book.sheet_by_index(0)
-        self.newFeatureFromData(sheet, self.testManager)
+        records = pyexcel.get_records(file_name = file_name)
+        self.newFeatureFromData(records, self.testManager)
     
     def exportExcel(self, file_name):
         style = xlwt.XFStyle()
@@ -469,23 +487,23 @@ class MainWindow(QMainWindow):
             
     def importExcelToMultiCase(self, file_name, folder):
         
-        self.execView.show()
+        self.showLogView(True)
         book = xlrd.open_workbook(file_name)
-        self.execView.append(f"Opend: {file_name} ok.\n")
+        self.logView.append(f"Opend: {file_name} ok.\n")
         for testcase_name in book.sheet_names():
             if testcase_name.startswith('Sheet'):
                 print(f"Skiped default sheet : {testcase_name}")
-                self.execView.append(f"Skiped default sheet : {testcase_name}")
+                self.logView.append(f"Skiped default sheet : {testcase_name}")
                 continue
             
             sheet = book.sheet_by_name(testcase_name)
             if sheet.nrows == 0:
                 print(f"Skiped empty sheet : {testcase_name}")
-                self.execView.append(f"Skiped empty sheet : {testcase_name}")
+                self.logView.append(f"Skiped empty sheet : {testcase_name}")
                 continue
                 
             print(f"Creating TestCase [{testcase_name}]")
-            self.execView.append(f"Creating TestCase [{testcase_name}]")
+            self.logView.append(f"Creating TestCase [{testcase_name}]")
                 
             testcase_folder = Path(folder, testcase_name)
             if not testcase_folder.is_dir():
@@ -501,80 +519,71 @@ class MainWindow(QMainWindow):
             qApp.processEvents()
             
             self.newFeatureFromData(sheet, manager)
-            
-            
-    def newFeatureFromData(self, sheet, manager):
+
+    def newFeatureFromData(self, records, manager):
         
         count = 0
-                                 #feature 对应 模块    
-        scenario_name_index  = 1 #场景名称 对应 用例标题
-        given_index = 8          #前置条件
-        steps_index = 2          #操作步骤
-        then_index = 4           #期望结果   
-        data_index = 3
-
+        hdr = {
+            'feature_name' : '所属模块',
+            'scenario_name' : '用例标题',
+            'given_steps' : '前置条件',
+            'when_steps' : '步骤', 
+            'then_steps' : '预期', 
+            'sample_data': '测试数据',
+            'tag_name'   : '优先级',  
+        }
+        
         def is_empty_line(line):
             for it in line:
                 if it.strip() != '':
                     return False
-            return True
+            return Trues
             
         def clean_steps(items):
             return list(filter(lambda x : len(x.strip()) > 0, items))
             
-        def build_scenario_from_line(line):
-            scenario_name = line[scenario_name_index]
-            givens = clean_steps(line[given_index].strip().split('\n'))
+        def build_scenario_from_record(record):
+            scenario_name = record[hdr['scenario_name']]
+            givens = clean_steps(record[hdr['given_steps']].strip().split('\n'))
             given_steps = [f'前置_{it}' for it in givens]
-            step_data = line[data_index]
-            #given_steps = clean_steps([' '.join(givens).strip(),])
-            when_steps = clean_steps(line[steps_index].strip().split('\n'))
-            #when_steps = clean_steps([steps.pop()])
-            #given_steps.extend(steps)
-        
-            then_steps = line[then_index].strip().split('\n')
+            when_steps = clean_steps(record[hdr['when_steps']].strip().split('\n'))
+            then_steps = record[hdr['then_steps']].strip().split('\n')
+            step_data = record[hdr['sample_data']]
+            tag_val = record[hdr['tag_name']] #.strip()
             
-            return Scenario(scenario_name, given_steps, when_steps, then_steps, step_data)
+            if tag_val:
+                tag = f'{hdr["tag_name"]}.{tag_val}'
+            else:
+                tag = None    
+
+            return Scenario(scenario_name, given_steps, when_steps, then_steps, step_data, tag)
         
         def newFeatureFor(name, scenarios, all_sets):
              nonlocal count
              count += 1
              feature_name = f'{count:03d}.{name}'
              if feature_name in manager.features:
-                 print(f"Skiping {feature_name}.")
-                 self.execView.append(f"Skiping {feature_name}.")
+                 #print(f"Skiping {feature_name}.")
+                 self.logView.append(f"Skiping {feature_name}.")
              else:
                  manager.newFeatureWith(feature_name, scenarios, all_sets)
-                 print(f'Feature {feature_name} commited.')
-                 self.execView.append(f'Feature {feature_name} commited.')
+                 #print(f'Feature {feature_name} commited.')
+                 self.logView.append(f'Feature {feature_name} commited.')
                 
         all_sets = [set(), set(), set()]
-        line_index = 1
         feature_name = None
         scenarios = []
         
-        while True:
+        for line_no, record in enumerate(records):
             
             qApp.processEvents()
             
-            line = sheet.row_values(line_index)
-            name = line[0] #f'{line[0]}_{line[1]}'
-            
-            if is_empty_line(line):
-                line_index += 1
-                #遇到最后一行, 把老Feature的数据提交处理    
-                if (line_index >= sheet.nrows): 
-                    if feature_name and scenarios:
-                        newFeatureFor(feature_name, scenarios, all_sets)
-                    break
-                else:
-                    continue
+            name = record[hdr['feature_name']]
             
             try:
-                scenario = build_scenario_from_line(line)
+                scenario = build_scenario_from_record(record)
             except Exception as e:
-                print(str(e))
-                self.execView.append(str(e))
+                self.logView.append(f'第{line_no}行, {record}, {str(e)}')
                 break
             
             scenarios.append(scenario)
@@ -582,13 +591,13 @@ class MainWindow(QMainWindow):
             #新的Feature
             if not feature_name: 
                 feature_name = name
-                print(f"Found New Feature {feature_name}")
-                self.execView.append(f"Found New Feature {feature_name}")
-                line_index += 1    
+                #print(f"Found New Feature {feature_name}")
+                self.logView.append(f"Found New Feature {feature_name}")
+                    
             #老Feature的新场景
             elif name == feature_name: 
                 print(f"    Feature {feature_name} append scenario {scenario.name}")
-                line_index += 1
+                
             #遇到新feature,先把老Feature的数据提交处理
             else:
                 newFeatureFor(feature_name, scenarios, all_sets)
@@ -597,7 +606,7 @@ class MainWindow(QMainWindow):
                 scenarios = []
             
             #遇到最后一行, 把老Feature的数据提交处理    
-            if (line_index >= sheet.nrows): 
+            if line_no == (len(records) - 1): 
                 if feature_name and scenarios:
                     newFeatureFor(feature_name, scenarios, all_sets)
                 break
@@ -656,7 +665,17 @@ class MainWindow(QMainWindow):
                         QMessageBox.Yes | QMessageBox.No , QMessageBox.Yes)
                 if YesNo == QMessageBox.Yes:
                     panel.reload(target_path)
-                
+    
+    def onShowMaxFeatureWin(self):
+        self.showLogView(False)
+        curr_panel = self.tabView.currentWidget()
+        curr_panel.showSplit(99)
+    
+    def onShowMaxCodeWin(self):
+        self.showLogView(False)
+        curr_panel = self.tabView.currentWidget()
+        curr_panel.showSplit(0)
+        
     def onSaveAllFiles(self):
         self.testManager.stopWatch()
         
@@ -691,6 +710,10 @@ class MainWindow(QMainWindow):
     def onPaste(self):
         panel = self.tabView.currentWidget()
         panel.onPaste()
+    
+    def onSearch(self):
+        panel = self.tabView.currentWidget()
+        #panel.onPaste()
         
     def createActions(self):
             
@@ -738,6 +761,12 @@ class MainWindow(QMainWindow):
             statusTip="检查测试集",
             triggered=self.onCheckTestCase)
         
+        self.codeDebugAction = QAction(
+            "调试",
+            self,
+            statusTip="代码调试",
+            triggered=self.onCodeDebug)
+        
         '''    
         self.newFileAction = QAction(
             "New File",
@@ -770,12 +799,43 @@ class MainWindow(QMainWindow):
             statusTip="导出到Excel文件",
             triggered=self.onExportExcel)
         
-        
         self.importMultiCaseAction = QAction(
             "导入目录",
             self,
             statusTip="导入Excel文件到多个目录",
             triggered=self.onImportMultiCase)
+        
+        self.showFeatureViewAction = QAction(
+            "显示Feature窗口",
+            self,
+            statusTip = "显示Feature", 
+            checkable = True,
+            triggered = self.showFeatureView)
+        
+        self.showLogViewAction = QAction(
+            "显示Log窗口",
+            self,
+            statusTip = "显示Log窗口",
+            checkable = True,
+            triggered = self.showLogView)
+        
+        self.showMaxFeatureWinAction = QAction(
+            "Max_Feature",
+            self,
+            statusTip="最大化Feature窗口",
+            triggered=self.onShowMaxFeatureWin)
+        
+        self.showMaxCodeWinAction = QAction(
+            "Max_Code",
+            self,
+            statusTip="最大化Code窗口",
+            triggered=self.onShowMaxCodeWin)
+        
+        self.searchAction = QAction(
+            "搜索",
+            self,
+            statusTip="搜索",
+            triggered=self.onSearch)
                 
         self.aboutAction = QAction(
             "&About",
@@ -788,7 +848,7 @@ class MainWindow(QMainWindow):
         ids = ["undo", "redo", "cut", "copy", "paste", 'save', 'saveall']
         icons = [
             "edit-undo.png", "edit-redo.png", "edit-cut.png", "edit-copy.png",
-            "edit-paste.png", "document-save.png", "document-save-all.png"
+            "edit-paste.png", "save.png", "save-all.png"
         ]
         shortcuts = [
             'Ctrl+Z', 'Ctrl+Y', 'Ctrl+X', 'Ctrl+C',
@@ -817,9 +877,9 @@ class MainWindow(QMainWindow):
         self.editMenu = self.menuBar().addMenu("&Edit")
         
         self.winMenu = self.menuBar().addMenu("&Windows")
-        #self.fileMenu.addAction(self.closeAction)
-        #self.fileMenu.addAction(self.exitAction)
-
+        self.winMenu.addAction(self.showFeatureViewAction)
+        self.winMenu.addAction(self.showLogViewAction)
+        
         self.helpMenu = self.menuBar().addMenu("&Help")
         self.helpMenu.addAction(self.aboutAction)
 
@@ -839,12 +899,22 @@ class MainWindow(QMainWindow):
         self.tbEdit = self.addToolBar("Edit")
         for i in l:
             self.tbEdit.addAction(i)
+        self.tbEdit.addAction(self.showMaxFeatureWinAction)
+        self.tbEdit.addAction(self.showMaxCodeWinAction)
+
+        self.tbEdit.addAction(self.searchAction)
+        
         self.addToolBar(self.tbEdit)
         
         self.tbRun = self.addToolBar("Run")
         self.tbRun.addAction(self.runTestAction)
         self.tbRun.addAction(self.viewReportAction)
         self.tbRun.addAction(self.checkTestAction)
+        self.tbRun.addAction(self.codeDebugAction)
+        
+        #self.tbShowWin = self.addToolBar("ShowWin")
+        #self.tbShowWin.addAction(self.showMaxCodeWinAction)
+        
         
         #self.toolbar.addAction(self.exitAction)
     
@@ -886,7 +956,9 @@ class MainWindow(QMainWindow):
             self.showMaximized()
         else:
             self.resize(size)
-                
+        
+        self.config['allure_cmd'] = settings.value('allure_cmd', 'allure.bat')
+
         if test_path.is_dir():
             if not self.testManager.openTestCase(test_path):
                 return
@@ -915,6 +987,8 @@ class MainWindow(QMainWindow):
         settings.setValue('last_test_path', str(self.testManager.path)) 
         settings.setValue('opened', self.getPanels()) 
         settings.setValue('active_tab', self.tabView.tabText(self.tabView.currentIndex())) 
+        
+        settings.setValue('allure_cmd', self.config['allure_cmd'])
         
     def about(self):
         pass

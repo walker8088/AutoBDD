@@ -12,6 +12,181 @@ from .utils import *
 
 #---------------------------------------------------------------#
 class FeatureLexer(QsciLexerCustom):
+    def __init__(self, parent):
+        #QsciLexerCustom.__init__(self, parent)
+        super().__init__(parent)
+
+        self._styles = {
+             0: 'Default',    #默认
+             1: 'Comment',    #注释
+             2: 'Section',    #节点
+             3: 'Key',        #关键字
+             4: 'Assignment', #赋值
+             5: 'Value',      #值  
+             }
+
+        for key,value in self._styles.items():
+             setattr(self, value, key)
+        self._foldcompact = True
+        
+        tokens = ["功能:", "场景:", "场景大纲:", "例子:", "假如", "当", "那么", "而且", "但是"]
+        
+        self.tokens = [(token.encode('utf-8'), len(token.encode('utf-8'))) for token in tokens]
+        
+    def foldCompact(self):
+         return self._foldcompact
+
+    def setFoldCompact(self, enable):
+         self._foldcompact = bool(enable)
+
+    def language(self):
+         return 'Config Files'
+
+    def description(self, style):
+         return self._styles.get(style, '')
+
+    def defaultColor(self, style):
+         if style == self.Default:
+             return QColor('#000000')
+         elif style == self.Comment:
+             return QColor('#A0A0A0')
+         elif style == self.Section:
+             return QColor('#CC6600')
+         elif style == self.Key:
+             return QColor('#0000CC')
+         elif style == self.Assignment:
+             return QColor('#CC0000')
+         elif style == self.Value:
+             return QColor('#00CC00')
+         return QsciLexerCustom.defaultColor(self, style)
+
+    def defaultPaper(self, style):
+         if style == self.Section:
+             return QColor('#FFEECC')
+         return QsciLexerCustom.defaultPaper(self, style)
+
+    def defaultEolFill(self, style):
+         if style == self.Section:
+             return True
+         return QsciLexerCustom.defaultEolFill(self, style)
+
+    def defaultFont(self, style):
+         if style == self.Comment:
+             if sys.platform in ('win32', 'cygwin'):
+                 return QFont('Comic Sans MS', 9)
+             return QFont('Bitstream Vera Serif', 9)
+         return QsciLexerCustom.defaultFont(self, style)
+    
+    
+    def styleText(self, start, end):
+         
+         def first_spaces(line):
+            for index in range(len(line)):
+                ch = chr(line[index])
+                if ch not in [' ', '\t']:
+                    return index 
+            return len(line)
+
+         editor = self.editor()
+         
+         #if editor is None:
+         #    return
+
+         SCI = editor.SendScintilla
+         GETFOLDLEVEL = QsciScintilla.SCI_GETFOLDLEVEL
+         SETFOLDLEVEL = QsciScintilla.SCI_SETFOLDLEVEL
+         HEADERFLAG = QsciScintilla.SC_FOLDLEVELHEADERFLAG
+         LEVELBASE = QsciScintilla.SC_FOLDLEVELBASE
+         NUMBERMASK = QsciScintilla.SC_FOLDLEVELNUMBERMASK
+         WHITEFLAG = QsciScintilla.SC_FOLDLEVELWHITEFLAG
+         
+         source = ''
+         if end > editor.length():
+             end = editor.length()
+         if end > start:
+             source = bytearray(end - start)
+             SCI(QsciScintilla.SCI_GETTEXTRANGE, start, end, source)
+         if not source:
+             return
+
+         compact = self.foldCompact()
+
+         index = SCI(QsciScintilla.SCI_LINEFROMPOSITION, start)
+         if index > 0:
+             pos = SCI(QsciScintilla.SCI_GETLINEENDPOSITION, index - 1)
+             state = SCI(QsciScintilla.SCI_GETSTYLEAT, pos)
+         else:
+             state = self.Default
+
+         self.startStyling(start, 0x1f)
+
+         for line in source.splitlines(True):
+            pos = 0 
+            length = len(line)
+            space_len = first_spaces(line)
+            
+            if length == space_len :
+                #空行, 或者都是空格的行
+                self.setStyling(length, self.Default)
+            else: 
+                if chr(line[0]) == '#':
+                    #注释行只能首字母为#,不能跳过空格
+                    state = self.Comment
+                elif space_len > 0:
+                    #前缀空格的处理
+                    self.setStyling(space_len, self.Default)
+                    pos += space_len
+
+                #line_left是跳过空格后剩下的字符串, 一定不会为空    
+                line_left = line[space_len:] 
+                if chr(line_left[0]) == '@':
+                    #标签行
+                    state = self.Value
+                else:     
+                    #处理标签
+                    for token, token_len in self.tokens:
+                        if line_left.startswith(token):
+                            self.setStyling(token_len, self.Key)
+                            pos += token_len
+                            state = self.Default
+
+                #如果pos还没到length, 说明剩余的数据都是同一个模式的数据    
+                if pos < length:
+                    self.setStyling(length-pos, state)
+            
+            if state == self.Section:
+                 level = LEVELBASE | HEADERFLAG
+            elif index > 0:
+                 lastlevel = SCI(GETFOLDLEVEL, index - 1)
+                 if lastlevel & HEADERFLAG:
+                     level = LEVELBASE + 1
+                 else:
+                     level = lastlevel & NUMBERMASK
+            else:
+                 level = LEVELBASE
+            '''      
+            if whitespace:
+                 level |= WHITEFLAG
+            if level != SCI(GETFOLDLEVEL, index):
+                  SCI(SETFOLDLEVEL, index, level)
+            '''
+            index += 1
+
+         if index > 0:
+             lastlevel = SCI(GETFOLDLEVEL, index - 1)
+             if lastlevel & HEADERFLAG:
+                 level = LEVELBASE + 1
+             else:
+                 level = lastlevel & NUMBERMASK
+         else:
+             level = LEVELBASE
+
+         lastlevel = SCI(GETFOLDLEVEL, index)
+         SCI(SETFOLDLEVEL, index, level | lastlevel & ~NUMBERMASK)
+
+#---------------------------------------------------------------#
+
+class BakFeatureLexer(QsciLexerCustom):
 
     def __init__(self, parent):
         super().__init__(parent)
@@ -24,20 +199,6 @@ class FeatureLexer(QsciLexerCustom):
 
         # Initialize colors per style
         # ----------------------------
-        self.setColor(QColor("#ff" + "000000"), 0)  # black
-        self.setColor(QColor("#ff" + "000000"), 1)  # black <b>
-        self.setColor(QColor("#ff" + "d60404"), 2)  # red
-        self.setColor(QColor("#ff" + "d60404"), 3)  # red <b>
-        self.setColor(QColor("#ff" + "ff7f00"), 4)  # orange
-        self.setColor(QColor("#ff" + "ff7f00"), 5)  # orange <b>
-        self.setColor(QColor("#ff" + "ba9b00"), 6)  # yellow
-        self.setColor(QColor("#ff" + "ba9b00"), 7)  # yellow <b>
-        self.setColor(QColor("#ff" + "20ad20"), 8)  # lightgreen
-        self.setColor(QColor("#ff" + "20ad20"), 9)  # lightgreen <b>
-        self.setColor(QColor("#ff" + "005900"), 10)  # green
-        self.setColor(QColor("#ff" + "005900"), 11)  # green <b>
-        self.setColor(QColor("#ff" + "0202ce"), 12)  # blue
-        self.setColor(QColor("#ff" + "0202ce"), 13)  # blue <b>
         self.setColor(QColor("#ff" + "9400d3"), 14)  # lightpurple
         self.setColor(QColor("#ff" + "9400d3"), 15)  # lightpurple <b>
         self.setColor(QColor("#ff" + "4b0082"), 16)  # purple
@@ -51,22 +212,6 @@ class FeatureLexer(QsciLexerCustom):
         self.setPaper(QColor("#ffffffff"), 1)  # white
         self.setPaper(QColor("#ffffffff"), 2)  # white
         self.setPaper(QColor("#ffffffff"), 3)  # white
-        self.setPaper(QColor("#ffffffff"), 4)  # white
-        self.setPaper(QColor("#ffffffff"), 5)  # white
-        self.setPaper(QColor("#ffffffff"), 6)  # white
-        self.setPaper(QColor("#ffffffff"), 7)  # white
-        self.setPaper(QColor("#ffffffff"), 8)  # white
-        self.setPaper(QColor("#ffffffff"), 9)  # white
-        self.setPaper(QColor("#ffffffff"), 10)  # white
-        self.setPaper(QColor("#ffffffff"), 11)  # white
-        self.setPaper(QColor("#ffffffff"), 12)  # white
-        self.setPaper(QColor("#ffffffff"), 13)  # white
-        self.setPaper(QColor("#ffffffff"), 14)  # white
-        self.setPaper(QColor("#ffffffff"), 15)  # white
-        self.setPaper(QColor("#ffffffff"), 16)  # white
-        self.setPaper(QColor("#ffffffff"), 17)  # white
-        self.setPaper(QColor("#ffffffff"), 18)  # white
-        self.setPaper(QColor("#ffffffff"), 19)  # white
 
         # Initialize fonts per style
         # ---------------------------
@@ -80,29 +225,16 @@ class FeatureLexer(QsciLexerCustom):
         self.setFont(QFont("Consolas", 13, weight=QFont.Bold), 7)
         self.setFont(QFont("Consolas", 13, ), 8)
         self.setFont(QFont("Consolas", 13, weight=QFont.Bold), 9)
-        self.setFont(QFont("Consolas", 13, ), 10)
-        self.setFont(QFont("Consolas", 13, weight=QFont.Bold), 11)
-        self.setFont(QFont("Consolas", 13, ), 12)
-        self.setFont(QFont("Consolas", 13, weight=QFont.Bold), 13)
-        self.setFont(QFont("Consolas", 13, ), 14)
-        self.setFont(QFont("Consolas", 13, weight=QFont.Bold), 15)
-        self.setFont(QFont("Consolas", 13, ), 16)
-        self.setFont(QFont("Consolas", 13, weight=QFont.Bold), 17)
-        self.setFont(QFont("Consolas", 13, ), 18)
-        self.setFont(QFont("Consolas", 13, weight=QFont.Bold), 19)
-
         
         # Indicator look and feel
         # ------------------------
         self.parent().indicatorDefine(QsciScintilla.HiddenIndicator, 0)
         self.parent().setIndicatorHoverStyle(QsciScintilla.PlainIndicator, 0)
 
-    ''''''
 
     def language(self):
         return "SimpleLanguage"
 
-    ''''''
 
     def description(self, style):
         if style == 0:
@@ -117,41 +249,10 @@ class FeatureLexer(QsciLexerCustom):
             return "orange"
         elif style == 5:
             return "orange <b>"
-        elif style == 6:
-            return "yellow"
-        elif style == 7:
-            return "yellow <b>"
-        elif style == 8:
-            return "lightgreen"
-        elif style == 9:
-            return "lightgreen <b>"
-        elif style == 10:
-            return "green"
-        elif style == 11:
-            return "green <b>"
-        elif style == 12:
-            return "blue"
-        elif style == 13:
-            return "blue <b>"
-        elif style == 14:
-            return "lightpurple"
-        elif style == 15:
-            return "lightpurple <b>"
-        elif style == 16:
-            return "purple"
-        elif style == 17:
-            return "purple <b>"
-        elif style == 18:
-            return "cyan"
-        elif style == 19:
-            return "cyan <b>"
-        ###
         return ""
 
-    ''''''
-
     def styleText(self, start, end):
-    
+        print(start, end)
         # 1. Initialize the styling procedure
         # ------------------------------------
         self.startStyling(start)
@@ -159,14 +260,18 @@ class FeatureLexer(QsciLexerCustom):
         # 2. Slice out a part from the text
         # ----------------------------------
         text = self.parent().text()[start:end]
+        lines = text.split('\n')
 
+        tokens = ["功能:", "场景:", "场景大纲:", "例子:", "假如", "当", "那么", "而且", "但是"]
+        
         # 3. Tokenize the text
         # ---------------------
         p = re.compile(r"[*]\/|\/[*]|\s+|\w+|\W")
 
         # 'token_list' is a list of tuples: (token_name, token_len)
+        #token_list = [(token, len(bytearray(token, "utf-8"))) for token in p.findall(text)]
         token_list = [(token, len(bytearray(token, "utf-8"))) for token in p.findall(text)]
-
+        #print(token_list)
         # 4. Style the text
         # ------------------
         # 4.1 Check if multiline comment
@@ -174,7 +279,7 @@ class FeatureLexer(QsciLexerCustom):
         
         # 4.2 Style the text in a loop
         for i, token in enumerate(token_list):
-            if token[0] in ["功能:", "场景:", "假如", "当", "那么", "而且", "但是"]:
+            if token[0] in ["功能", "场景", "场景大纲", "例子", "假如", "当", "那么", "而且", "但是"]:
                 # cyan
                 self.setStyling(token[1], 18)
 
@@ -186,7 +291,6 @@ class FeatureLexer(QsciLexerCustom):
                 self.setStyling(token[1], 0)
             ###
         
-    ''''''        
 #---------------------------------------------------------------#
 class CustomEditor(QsciScintilla):
     ARROW_MARKER_NUM = 8
@@ -250,12 +354,10 @@ class CustomEditor(QsciScintilla):
     def focusInEvent(self, event):
         super().focusInEvent(event)
         self.isFocus = True
-        #print('focusInEvent', event)
-    
+        
     def focusOutEvent(self, event):
         super().focusOutEvent(event)
         self.isFocus = False
-        #print('focusOutEvent', event)
         
 #---------------------------------------------------------------#
 class FeatureEditor(CustomEditor):

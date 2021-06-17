@@ -44,10 +44,12 @@ class ProcessOutThread(QThread):
         self.stoped.emit(ret)
         
 #---------------------------------------------------------------#
-class CmdExecView(QDockWidget):
+class LogView(QDockWidget):
     def __init__(self, parent):
-        super().__init__('进程输出')
+        super().__init__('日志记录')
         self.setAllowedAreas(Qt.TopDockWidgetArea | Qt.BottomDockWidgetArea)
+        self.setFeatures(QDockWidget.DockWidgetMovable)
+        
         self.parent = parent
         
         font = QFont()
@@ -63,6 +65,7 @@ class CmdExecView(QDockWidget):
         self.setWidget(self.textInfo)
     
     def append(self, text):
+        self.show()
         self.textInfo.append(text)    
     
     def clear(self):
@@ -88,9 +91,9 @@ class FeatureView(QDockWidget):
         super().__init__('')
         
         self.setAllowedAreas(Qt.LeftDockWidgetArea | Qt.RightDockWidgetArea)
-        
+        self.setFeatures(QDockWidget.DockWidgetMovable)
         self.parent = parent
-        
+
         '''
         # 3. Place a button
         self.newFeatureBtn = QPushButton("+")
@@ -348,20 +351,20 @@ class FeaturePanel(QWidget):
         self.pythonEditor = PythonEditor(panel = self)
         self.pythonEditor.textChanged.connect(self.onStepChanged)
         
-        splitter = QSplitter(self)
-        splitter.setOrientation(Qt.Vertical)
-        splitter.splitterMoved.connect(self.onSplitterMoved)
+        self.splitter = QSplitter(self)
+        self.splitter.setOrientation(Qt.Vertical)
+        self.splitter.splitterMoved.connect(self.onSplitterMoved)
         
-        splitter.addWidget(self.featureEditor)
-        splitter.addWidget(self.pythonEditor)
-        splitter.setStretchFactor(0, 50)
-        splitter.setStretchFactor(1, 50)
+        self.splitter.addWidget(self.featureEditor)
+        self.splitter.addWidget(self.pythonEditor)
+        self.splitter.setStretchFactor(0, 50)
+        self.splitter.setStretchFactor(1, 50)
         
         if self.split_pos:
-            splitter.moveSplitter(self.split_pos, 1)
+            self.splitter.moveSplitter(self.split_pos, 1)
         
         hbox=QHBoxLayout()
-        hbox.addWidget(splitter)
+        hbox.addWidget(self.splitter)
         self.setLayout(hbox)
     
     def onFeatureChanged(self):
@@ -430,6 +433,12 @@ class FeaturePanel(QWidget):
         
         self.textChanged = [False, False]
     
+    def showSplit(self, ratio):
+
+        height = self.size().height()
+        split_value = height * ratio // 100
+        self.splitter.moveSplitter(split_value, 1)
+        
     def reload(self, file_path):
         
         if file_path == self.featureFile:
@@ -446,8 +455,7 @@ class FeaturePanel(QWidget):
         
     def onSplitterMoved(self, pos, index):
         self.split_pos = pos
-        #print(pos, index)
-    
+        
     def isCodeExist(self, code_str):
         match = re.search(code_str, self.pythonEditor.text())
         return True if match else False
@@ -519,4 +527,86 @@ class FeaturePanel(QWidget):
             self.pythonEditor.redo()
 
 #---------------------------------------------------------------#
+'''
+class Ui_Dialog(object):
+    def setupUi(self, Dialog):
+        Dialog.setObjectName("Dialog")
+        Dialog.resize(358, 126)
+        self.verticalLayout = QtWidgets.QVBoxLayout(Dialog)
+        self.verticalLayout.setObjectName("verticalLayout")
+        self.horizontalLayout_3 = QtWidgets.QHBoxLayout()
+        self.horizontalLayout_3.setObjectName("horizontalLayout_3")
+        self.dialoglabel = QtWidgets.QLabel(Dialog)
+        self.dialoglabel.setObjectName("dialoglabel")
+        self.horizontalLayout_3.addWidget(self.dialoglabel)
+        self.verticalLayout.addLayout(self.horizontalLayout_3)
+        self.horizontalLayout_2 = QtWidgets.QHBoxLayout()
+        self.horizontalLayout_2.setObjectName("horizontalLayout_2")
+        self.dialoglineedit = QtWidgets.QLineEdit(Dialog)
+'''
+#---------------------------------------------------------------#
+class CmdExecDialog(QDialog):
 
+    def __init__(self, config, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        
+        #self.setWindowTitle("HELLO!")
+        
+        self.config = config
+        
+        QBtn = QDialogButtonBox.Ok | QDialogButtonBox.Cancel
+        
+        self.buttonBox = QDialogButtonBox(QBtn)
+        self.buttonBox.accepted.connect(self.accept)
+        self.buttonBox.rejected.connect(self.reject)
+        
+        self.verbose_check = QCheckBox("输出详细信息")
+        self.verbose_check.setChecked(True)
+        
+        self.report_check = QCheckBox("输出Allure记录")
+        self.report_check.setChecked(True)
+
+        self.cmd = QLineEdit()
+        self.report = QLineEdit()
+
+        self.layout = QVBoxLayout()
+        self.layout.addWidget(QLabel(''))
+        self.layout.addWidget(self.verbose_check)
+        self.layout.addWidget(self.report_check)
+        self.layout.addWidget(QLabel('Behave命令'))
+        self.layout.addWidget(self.cmd)
+        self.layout.addWidget(QLabel('Allure命令'))
+        self.layout.addWidget(self.report)
+        self.layout.addWidget(QLabel(''))
+        self.layout.addWidget(self.buttonBox)
+        #self.layout.addWidget(QLabel(''))
+        
+        self.verbose_check.clicked.connect(self.on_changed)
+        self.report_check.clicked.connect(self.on_changed)
+        
+        self.report.setText(self.config['allure_cmd'])
+
+        self.update_cmd()
+
+        self.setLayout(self.layout)
+        
+        self.resize(700, 250)
+        
+    @pyqtSlot()
+    def on_changed(self):    
+        self.update_cmd()
+
+    def update_cmd(self):
+        #f'behave -f allure_behave.formatter:AllureFormatter -o "{allure_log_path}"'
+        
+        verbose_cmd = '-vv' if self.verbose_check.isChecked() else ''
+        allure_log_path = self.config["allure_log_path"]
+        
+        if self.report_check.isChecked():
+            allure_log = f'-f allure_behave.formatter:AllureFormatter -o "{allure_log_path}"'
+        else:
+            allure_log = ''    
+        
+        self.cmd.setText( f'behave {verbose_cmd} {allure_log}' )
+
+#---------------------------------------------------------------#

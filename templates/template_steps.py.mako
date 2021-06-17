@@ -14,24 +14,24 @@ from behave import given, when, then, step_matcher
 ##${scenario.name}##
 ##given##
   % for given_step in scenario.given_steps :
-@given('${given_step}')
-def step_impl(ctx):
+@given('${given_step.name_out}')
+def step_impl(ctx, ${', '.join(given_step.params)}):
     pass
 
   % endfor
 
 ##when##
   % for when_step in scenario.when_steps :
-@when('${when_step}')
-def step_impl(ctx):
+@when('${when_step.name_out}')
+def step_impl(ctx, ${', '.join(when_step.params)}):
     pass
 
   % endfor
 
 ##then##
   % for then_step in scenario.then_steps :   
-@then('${then_step}')
-def step_impl(ctx):
+@then('${then_step.name_out}')
+def step_impl(ctx, ${', '.join(then_step.params)}):
     pass
 
   % endfor

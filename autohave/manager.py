@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import os, sys
+import re
 import shutil
 import copy
 from pathlib import Path
@@ -24,21 +25,66 @@ STEPS_PATH = 'steps'
 PY_ENV_FILE = 'environment.py'
 DEFAULT_ENV_FILE = 'default_environment.py'
 FEATURE_TEMPLATE_FILE = 'template.feature'
-#FEATURE_JINJA2_TEMPLATE_FILE = 'template.feature.jinja2'
 FEATURE_MAKO_TEMPLATE_FILE = 'template.feature.mako'
 
 PY_TEMPLATE_FILE = 'template_steps.py'
-#PY_JINJA2_TEMPLATE_FILE = 'template_steps.py.jinja2'
 PY_MAKO_TEMPLATE_FILE = 'template_steps.py.mako'
 
 #---------------------------------------------------------------#
-@dataclass
 class Scenario:
-    name: str
-    given_steps: list
-    when_steps:  list
-    then_steps:  list
-    step_data: str
+    def __init__(self, name, given_steps, when_steps, then_steps, step_data = '', tag = None):
+        self.name = name
+        self.given_steps = [Step(it) for it in given_steps]
+        self.when_steps = [Step(it) for it in when_steps]
+        self.then_steps = [Step(it) for it in then_steps]
+        self.tag = tag
+        self.parse_data(step_data.strip())
+        
+    def get_all_params(self):
+        params = []
+        
+        for it in self.given_steps:
+            params.extend(it.params)
+        for it in self.when_steps:
+            params.extend(it.params)
+        for it in self.then_steps:
+            params.extend(it.params)
+        
+        return params
+
+    def parse_data(self, data):
+        self.step_data = data
+        data_lines = data.split('\n')
+        dt = []
+        for it in data_lines:
+            item = it.strip()
+            if not item: continue 
+            if ":" in item:
+                dt.append(item.split(":")[1])
+            elif  "：" in item:
+                dt.append(item.split("：")[1])
+            else :            
+                dt.append(item)     
+        self.step_data_out = dt 
+
+#---------------------------------------------------------------#
+class Step:
+    def __init__(self, name):
+        self.name = name
+        self.parse_step(name)
+        
+    def parse_step(self, name):   
+        p = re.compile(r'[<](.*?)[>]', re.S)  #最小匹配
+        #参数解析
+        self.params = re.findall(p, name)
+        #带参数的步骤, 模板输出内容替换<>为{}
+        if self.params :
+            self.name_out = name.replace('<', '{').replace('>', '}')
+        else :
+            self.name_out = name
+                
+    def __str__(self):
+        return self.name
 
 #---------------------------------------------------------------#
 class FeatureItem:
@@ -398,9 +444,9 @@ class TestCaseManager(QObject):
         def clean_add(steps, all_set):
             clean_steps = []
             for step in steps:
-                if step not in all_set:
-                    clean_steps.append(step)
-                    all_set.add(step)
+                if step.name not in all_set:
+                    clean_steps.append(step.name)
+                    all_set.add(step.name)
             return clean_steps
             
         all_given_set = all_sets[0]
@@ -413,7 +459,6 @@ class TestCaseManager(QObject):
             clean_given_steps = clean_add(scen.given_steps, all_given_set)
             clean_when_steps = clean_add(scen.when_steps, all_when_set)
             clean_then_steps = clean_add(scen.then_steps, all_then_set)
-            
-            clean_scenarios.append(Scenario(scen.name, clean_given_steps, clean_when_steps, clean_then_steps, scen.step_data))
+            clean_scenarios.append(Scenario(scen.name, clean_given_steps, clean_when_steps, clean_then_steps, scen.step_data, scen.tag))
         
         return clean_scenarios   
