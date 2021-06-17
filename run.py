@@ -10,7 +10,7 @@ if __name__ == "__main__":
     if curr_dir:
         os.chdir(curr_dir)
     try:
-        from autohave.app import run
+        from autobdd.app import run
         run()
     except Exception as e:
         #log_file = f'exception_{datetime.datetime.now().strftime("%Y_%m_%d_%H_%M_%S")}.log' 

@@ -6,6 +6,7 @@ import shutil
 import uuid
 from pathlib import Path
 from subprocess import Popen, PIPE
+import traceback
 
 from behave import parser
 
@@ -26,8 +27,8 @@ from .views import *
 from .report import *
 
 #---------------------------------------------------------------#
-APP_NAME = 'AutoBehaveTest'
-APP_SHOW = 'AutoBehaveTest BDD自动化测试'
+APP_NAME = 'AutoBDD'
+APP_SHOW = 'AutoBDD测试用例管理'
 UID_FILE = 'uid'
 
 #---------------------------------------------------------------#
@@ -445,9 +446,21 @@ class MainWindow(QMainWindow):
             
     def importExcel(self, file_name):
         records = pyexcel.get_records(file_name = file_name)
-        self.newFeatureFromData(records, self.testManager)
+        if len(records) == 0:
+            QMessageBox.information(self, '文件内容为空')
+            return
+
+        headers = records[1].keys()
+
+        dlg = HeaderChoiceDialog(headers, self)
+        headers_map = dlg.do_choice()
+        if not headers_map:
+            return
+        
+        self.newFeatureFromData(records, headers_map, self.testManager)
     
     def exportExcel(self, file_name):
+
         style = xlwt.XFStyle()
         style.alignment.wrap = 1
         
@@ -458,7 +471,7 @@ class MainWindow(QMainWindow):
         book = xlwt.Workbook(encoding = 'utf-8')
         sheet = book.add_sheet('sheet1')
         
-        head = ['功能', '用例标题', '操作步骤', '期望结果', '前置条件', '测试结果']
+        head = ['功能', '场景', '操作步骤', '期望结果', '前置条件', '测试结果']
         write_row(sheet, 0, head, style)
         
         row = 1
@@ -467,7 +480,7 @@ class MainWindow(QMainWindow):
             items = ['' for i in range(6)]
             text = feature.feature_file.read_text(encoding = 'utf-8')
             model = p.parse(text)
-            items[0] = model.name
+            #items[0] = model.name
             for scenario in model.scenarios:
                 items[1] = scenario.name
                 op_names = []
@@ -480,14 +493,24 @@ class MainWindow(QMainWindow):
                 items[4] = op_names.pop(0)
                 items[2] = '\n'.join(op_names)
                 items[3] = '\n'.join(results)     
-            write_row(sheet, row, items, style)
-            row += 1
+                write_row(sheet, row, items, style)
+                row += 1
             
         book.save(file_name)    
             
     def importExcelToMultiCase(self, file_name, folder):
-        
+
         self.showLogView(True)
+        
+        '''
+        headers = records[1].keys()
+
+        dlg = HeaderChoiceDialog(headers, self)
+        headers_map = dlg.do_choice()
+        if not headers_map:
+            return
+        '''
+        
         book = xlrd.open_workbook(file_name)
         self.logView.append(f"Opend: {file_name} ok.\n")
         for testcase_name in book.sheet_names():
@@ -518,38 +541,32 @@ class MainWindow(QMainWindow):
             
             qApp.processEvents()
             
-            self.newFeatureFromData(sheet, manager)
+            self.newFeatureFromData(sheet, headers_map, manager)
 
-    def newFeatureFromData(self, records, manager):
+    def newFeatureFromData(self, records, header_map, manager):
         
         count = 0
-        hdr = {
-            'feature_name' : '所属模块',
-            'scenario_name' : '用例标题',
-            'given_steps' : '前置条件',
-            'when_steps' : '步骤', 
-            'then_steps' : '预期', 
-            'sample_data': '测试数据',
-            'tag_name'   : '优先级',  
-        }
-        
+        hdr = header_map
+
         def is_empty_line(line):
             for it in line:
-                if it.strip() != '':
+                if str(it).strip() != '':
                     return False
             return Trues
             
         def clean_steps(items):
-            return list(filter(lambda x : len(x.strip()) > 0, items))
-            
+            ll = list(filter(lambda x : len(str(x).strip()) > 0, items))
+            print(ll)
+            return [str(x) for x in ll]
+
         def build_scenario_from_record(record):
             scenario_name = record[hdr['scenario_name']]
-            givens = clean_steps(record[hdr['given_steps']].strip().split('\n'))
+            givens = clean_steps(record[hdr['given_steps']].split('\n'))
             given_steps = [f'前置_{it}' for it in givens]
-            when_steps = clean_steps(record[hdr['when_steps']].strip().split('\n'))
+            when_steps = clean_steps(record[hdr['when_steps']].split('\n'))
             then_steps = record[hdr['then_steps']].strip().split('\n')
-            step_data = record[hdr['sample_data']]
-            tag_val = record[hdr['tag_name']] #.strip()
+            step_data = record[hdr['sample_data']] if 'sample_data' in hdr else ''
+            tag_val = record[hdr['tag_name']] if 'tag_name' in hdr else None
             
             if tag_val:
                 tag = f'{hdr["tag_name"]}.{tag_val}'
@@ -584,6 +601,8 @@ class MainWindow(QMainWindow):
                 scenario = build_scenario_from_record(record)
             except Exception as e:
                 self.logView.append(f'第{line_no}行, {record}, {str(e)}')
+                tb = traceback.format_exc()
+                self.logView.append(tb)
                 break
             
             scenarios.append(scenario)
@@ -610,7 +629,8 @@ class MainWindow(QMainWindow):
                 if feature_name and scenarios:
                     newFeatureFor(feature_name, scenarios, all_sets)
                 break
-
+        self.logView.append('导入完成。')
+                
     def onNewFeature(self):
         feature_name, ok = QInputDialog.getText(self, "输入", "请输入新建Feature名:", QLineEdit.Normal, "")
         if ok and feature_name != '':
@@ -820,13 +840,13 @@ class MainWindow(QMainWindow):
             triggered = self.showLogView)
         
         self.showMaxFeatureWinAction = QAction(
-            "Max_Feature",
+            "FeatureMax",
             self,
             statusTip="最大化Feature窗口",
             triggered=self.onShowMaxFeatureWin)
         
         self.showMaxCodeWinAction = QAction(
-            "Max_Code",
+            "CodeMax",
             self,
             statusTip="最大化Code窗口",
             triggered=self.onShowMaxCodeWin)

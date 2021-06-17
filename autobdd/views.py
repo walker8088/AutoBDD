@@ -610,3 +610,71 @@ class CmdExecDialog(QDialog):
         self.cmd.setText( f'behave {verbose_cmd} {allure_log}' )
 
 #---------------------------------------------------------------#
+class HeaderChoiceDialog(QDialog):
+
+    def __init__(self, headers, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        
+        #self.setWindowTitle("HELLO!")
+        
+        #self.config = config
+        self.headers = headers
+
+        self.headers_map = {
+            'feature_name' : ['功能', None, ('功能', ), True],
+            'scenario_name': ['场景', None, ('用例',), True],
+            'given_steps' :  ['前置条件', None, ('前置',), True],
+            'when_steps' :   ['步骤', None, ('步骤',), True], 
+            'then_steps' :   ['预期', None, ('预期',), True], 
+            'sample_data':   ['测试数据', None, ('测试数据',), False],
+            'tag_name'   :   ['标签', None, ('标签',), False],
+        }
+
+        QBtn = QDialogButtonBox.Ok | QDialogButtonBox.Cancel
+        
+        self.buttonBox = QDialogButtonBox(QBtn)
+        self.buttonBox.accepted.connect(self.accept)
+        self.buttonBox.rejected.connect(self.reject)
+        
+        layout = QFormLayout()
+
+        for it in self.headers_map.values():
+            it[1] = QComboBox()
+            it[1].addItem('') 
+            it[1].addItems(self.headers)
+            it[1].setCurrentIndex(0)
+            it[1].activated.connect(self.on_sel_changed)
+            found = False
+            for key_text in it[2]:
+                for index, h in enumerate(self.headers):
+                    #print(index, h, key_text)
+                    if h.find(key_text) >= 0:
+                        it[1].setCurrentIndex(index + 1)
+                        found = True
+                        break
+                if found:
+                    break
+            layout.addRow(it[0], it[1])
+        
+        layout.addWidget(self.buttonBox)
+
+        self.setLayout(layout)
+    
+    def on_sel_changed(self, index):
+        print(index)
+
+    def do_choice(self):
+        
+        if not self.exec_():
+            return None
+        
+        hdr = {}
+        for key, value in self.headers_map.items():     
+            txt = value[1].currentText()
+            if txt == '':
+                continue
+            hdr[key] = txt
+        
+        return hdr
+
+#---------------------------------------------------------------#
