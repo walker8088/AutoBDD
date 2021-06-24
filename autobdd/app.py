@@ -840,13 +840,13 @@ class MainWindow(QMainWindow):
             triggered = self.showLogView)
         
         self.showMaxFeatureWinAction = QAction(
-            "FeatureMax",
+            "Feature",
             self,
             statusTip="最大化Feature窗口",
             triggered=self.onShowMaxFeatureWin)
         
         self.showMaxCodeWinAction = QAction(
-            "CodeMax",
+            "Code",
             self,
             statusTip="最大化Code窗口",
             triggered=self.onShowMaxCodeWin)
